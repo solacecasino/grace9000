@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 /// The protocol version sent in `initialize`. New versions only add things.
-pub const PROTOCOL: u32 = 1;
+pub const PROTOCOL: u32 = 2;
 
 pub const EDIT_READ: &str = "edit.read";
 pub const EDIT_CHANGE: &str = "edit.change";
@@ -66,6 +66,8 @@ pub struct Manifest {
     pub panels: Vec<PanelSpec>,
     #[serde(default)]
     pub exports: Vec<ExportSpec>,
+    #[serde(default)]
+    pub opens: Vec<OpenSpec>,
 }
 
 #[derive(Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -118,6 +120,52 @@ pub struct ExportSpec {
     /// 8 or 16 bits a channel into ffmpeg; 0: the photo's own.
     #[serde(default)]
     pub bits: u32,
+}
+
+/// File types an adapter opens: its program turns one into a picture
+/// grace9000 reads, then quits. `run` has `{input}` (the file) and
+/// `{output}` (where the picture goes, as 8 or 16-bit PAM or PNG).
+#[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq)]
+pub struct OpenSpec {
+    pub label: String,
+    /// Without the dot; any case.
+    pub extensions: Vec<String>,
+    pub run: Vec<String>,
+}
+
+/// An adapter's way of opening some files, ready to run on a reading thread.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Opener {
+    pub adapter: String,
+    pub label: String,
+    pub dir: PathBuf,
+    pub run: Vec<String>,
+    pub extensions: Vec<String>,
+    /// The user allowed it (built-in ones always are).
+    pub approved: bool,
+}
+
+impl Opener {
+    pub fn opens(&self, path: &Path) -> bool {
+        let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+        self.extensions.iter().any(|e| e.eq_ignore_ascii_case(&ext))
+    }
+
+    /// Runs the program on `input`, writing `output`. Blocks; call it off
+    /// the interface thread.
+    pub fn run(&self, input: &Path, output: &Path, env: &Env) -> Result<(), String> {
+        // Absolute, since the program starts in its own folder.
+        let (input, output) = (std::path::absolute(input).unwrap_or(input.into()), std::path::absolute(output).unwrap_or(output.into()));
+        let fill = |a: &String| a.replace("{input}", &input.to_string_lossy()).replace("{output}", &output.to_string_lossy());
+        let run: Vec<String> = self.run.iter().map(fill).collect();
+        let child = spawn(&self.dir, &run, env)?;
+        let out = child.wait_with_output().map_err(|e| e.to_string())?;
+        if !out.status.success() {
+            let err = String::from_utf8_lossy(&out.stderr);
+            return Err(format!("{}: {}", self.adapter, err.trim().lines().last().unwrap_or("it couldn't open the file")));
+        }
+        Ok(())
+    }
 }
 
 /// What the reader threads tell the interface.
@@ -465,6 +513,24 @@ impl Host {
     pub fn export(&self, adapter: &str, id: &str) -> Option<&ExportSpec> {
         self.exports().find(|(a, e)| *a == adapter && e.id == id).map(|(_, e)| e)
     }
+
+    /// Every adapter's file types, in the order adapters are listed.
+    pub fn openers(&self) -> Vec<Opener> {
+        let mut out = Vec::new();
+        for (i, a) in self.all.iter().enumerate() {
+            for o in &a.manifest.opens {
+                out.push(Opener {
+                    adapter: a.manifest.name.clone(),
+                    label: o.label.clone(),
+                    dir: a.dir.clone(),
+                    run: o.run.clone(),
+                    extensions: o.extensions.iter().map(|e| e.trim_start_matches('.').to_lowercase()).collect(),
+                    approved: self.approved(i),
+                });
+            }
+        }
+        out
+    }
 }
 
 impl Drop for Host {
@@ -561,7 +627,9 @@ pub fn check_platform(dir: &Path, manifest: &Manifest) -> Result<(), String> {
 /// folder; on Windows `.exe` is added when that's what's there, so one
 /// adapter.toml works everywhere.
 fn program_path(dir: &Path, program: &str) -> PathBuf {
+    // Absolute, since the program starts in its own folder.
     let path = dir.join(program);
+    let path = std::path::absolute(&path).unwrap_or(path);
     if cfg!(windows) && !path.exists() {
         let exe = path.with_extension("exe");
         if exe.exists() {
@@ -673,8 +741,13 @@ fn parse_manifest(text: &str, at: &str) -> Result<Manifest, String> {
             env!("CARGO_PKG_VERSION")
         ));
     }
-    if manifest.run.is_empty() && manifest.exports.is_empty() {
-        return Err(format!("{at}: needs a program to `run`, or `[[exports]]`"));
+    if manifest.run.is_empty() && manifest.exports.is_empty() && manifest.opens.is_empty() {
+        return Err(format!("{at}: needs a program to `run`, `[[exports]]` or `[[opens]]`"));
+    }
+    for o in &manifest.opens {
+        if o.extensions.is_empty() || o.run.is_empty() || !o.run.iter().any(|a| a.contains("{input}")) || !o.run.iter().any(|a| a.contains("{output}")) {
+            return Err(format!("{at}: each `[[opens]]` needs `extensions`, and a `run` with {{input}} and {{output}}"));
+        }
     }
     if manifest.run.is_empty() && !(manifest.commands.is_empty() && manifest.panels.is_empty()) {
         return Err(format!("{at}: commands and panels need a program to `run`"));
@@ -863,10 +936,16 @@ pub fn summary(m: &Manifest) -> Vec<String> {
     if !m.exports.is_empty() {
         adds.push(format!("{} export format{}", m.exports.len(), if m.exports.len() == 1 { "" } else { "s" }));
     }
+    if !m.opens.is_empty() {
+        let exts: Vec<String> = m.opens.iter().flat_map(|o| o.extensions.iter().map(|e| format!(".{e}"))).collect();
+        adds.push(format!("opening {} files", exts.join(" ")));
+    }
     if !adds.is_empty() {
         lines.push(format!("Adds {}.", adds.join(", ")));
     }
-    if m.run.is_empty() {
+    if m.run.is_empty() && !m.opens.is_empty() {
+        lines.push("Its program runs on the files it opens, and nothing else.".into());
+    } else if m.run.is_empty() {
         lines.push("It has no program: nothing of it runs.".into());
     } else if m.permissions.is_empty() {
         lines.push("It doesn't ask for any permissions.".into());
@@ -1080,6 +1159,17 @@ done
         zip.finish().unwrap();
         assert!(install_into(&zip_path, &root.join("adapters")).is_err());
         assert!(!root.join("outside.txt").exists() && !root.parent().unwrap().join("outside.txt").exists());
+    }
+
+    #[test]
+    fn adapters_can_open_files() {
+        let m = parse_manifest("name = \"Raw\"\n[[opens]]\nlabel = \"Raw\"\nextensions = [\"CR2\", \".nef\"]\nrun = [\"./raw\", \"{input}\", \"{output}\"]\n", "x").unwrap();
+        assert_eq!(m.opens[0].extensions.len(), 2);
+        assert!(summary(&m).iter().any(|l| l.contains(".CR2")));
+        // Without {output}, it couldn't hand anything back.
+        assert!(parse_manifest("name = \"Raw\"\n[[opens]]\nlabel = \"Raw\"\nextensions = [\"cr2\"]\nrun = [\"./raw\", \"{input}\"]\n", "x").is_err());
+        let o = Opener { adapter: "Raw".into(), label: "Raw".into(), dir: ".".into(), run: vec![], extensions: vec!["cr2".into(), "nef".into()], approved: true };
+        assert!(o.opens(Path::new("/a/IMG_1.CR2")) && !o.opens(Path::new("a.jpg")));
     }
 
     #[test]

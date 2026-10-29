@@ -939,7 +939,10 @@ fn adapters_panel(app: &mut App, ui: &mut Ui) {
             if !m.description.is_empty() {
                 ui.label(RichText::new(&m.description).color(pal.weak));
             }
-            let can = if m.run.is_empty() {
+            let can = if m.run.is_empty() && !m.opens.is_empty() {
+                let n: usize = m.opens.iter().map(|o| o.extensions.len()).sum();
+                format!("Opens {n} kinds of file; runs only on those")
+            } else if m.run.is_empty() {
                 "Presets only: nothing runs".to_owned()
             } else if m.permissions.is_empty() {
                 "No permissions".to_owned()
@@ -962,6 +965,9 @@ fn adapters_panel(app: &mut App, ui: &mut Ui) {
                     if ui.add(egui::Button::selectable(app.layout.contains(&kind), RichText::new(format!("{} panel", p.title)).small())).clicked() {
                         toggles.push((m.name.clone(), p.id.clone()));
                     }
+                }
+                if !m.opens.is_empty() && !app.adapters.approved(i) && ui.small_button("Allow…").on_hover_text("Let it open the files it knows").clicked() {
+                    app.queue.push(format!("adapter-start \"{}\"", m.name));
                 }
                 let tip = if a.builtin { "Take it out of grace9000; Add Back brings it again" } else { "Move it to the Trash" };
                 if ui.small_button("Remove").on_hover_text(tip).clicked() {

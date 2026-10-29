@@ -267,16 +267,16 @@ mod tests {
         };
         let (r, out) = run("a.png", How::Png(16), 0);
         r.unwrap();
-        let back = crate::image::load(None, &out).unwrap();
+        let back = crate::image::load(None, &out, &[], &Default::default()).unwrap();
         assert_eq!((back.width, back.height, back.bits()), (300, 200, 16));
         let (r, out) = run("b.png", How::Png(8), 150);
         r.unwrap();
-        assert_eq!(crate::image::load(None, &out).unwrap().width, 150);
+        assert_eq!(crate::image::load(None, &out, &[], &Default::default()).unwrap().width, 150);
         if Tools::find("").is_some() || std::env::var_os("GRACE9000_REQUIRE_FFMPEG").is_some() {
             let s = Export::default();
             let (r, out) = run("c.jpg", how("jpg", &s, 16, None).unwrap(), 0);
             r.unwrap();
-            let back = crate::image::load(Tools::find("").as_ref(), &out).unwrap();
+            let back = crate::image::load(Tools::find("").as_ref(), &out, &[], &Default::default()).unwrap();
             assert_eq!((back.width, back.height), (300, 200));
         }
         let _ = std::fs::remove_dir_all(&dir);

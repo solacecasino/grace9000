@@ -1,0 +1,15 @@
+name = "Camera Raw"
+version = "0.1.0"
+author = "grace9000"
+license = "MIT"
+description = "Opens raw files from cameras: Canon, Nikon, Sony, Fujifilm, Olympus, Panasonic, Pentax, Leica, Hasselblad, Phase One and DNG."
+homepage = "https://github.com/solacecasino/grace9000"
+requires = "0.0.2"
+
+# Opening a file runs `camera-raw <file> <picture.pam>`: the photo
+# demosaiced, white balanced as the camera saw it, in sRGB, 16 bits a
+# channel, turned the way the camera was held.
+[[opens]]
+label = "Camera raw"
+extensions = ["ari", "arw", "cr2", "cr3", "crm", "crw", "dcr", "dcs", "dng", "erf", "iiq", "kdc", "mef", "mos", "mrw", "nef", "nrw", "orf", "ori", "pef", "raf", "raw", "rw2", "rwl", "srw", "3fr", "fff", "x3f", "qtk"]
+run = ["./camera-raw", "{input}", "{output}"]

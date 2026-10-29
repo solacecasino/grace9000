@@ -24,6 +24,7 @@ case "$(uname -s)" in
     d=grace9000-$VERSION-linux-$(arch)
     rm -rf target/stage && mkdir -p "target/stage/$d"
     cp target/release/grace9000 README.md LICENSE "target/stage/$d/"
+    scripts/stage-adapters.sh "target/stage/$d/adapters"
     cp packaging/linux/install.sh packaging/linux/grace9000.desktop "target/stage/$d/"
     cp assets/icon-256.png "target/stage/$d/grace9000.png"
     tar -czf "dist/$d.tar.gz" -C target/stage "$d"
@@ -34,9 +35,10 @@ case "$(uname -s)" in
     cargo build --release
     rm -rf target/stage && mkdir -p target/stage
     cp target/release/grace9000.exe README.md LICENSE target/stage/
+    scripts/stage-adapters.sh target/stage/adapters
     out="dist/grace9000-$VERSION-windows-$(arch).zip"
     rm -f "$out"
-    (cd target/stage && python -m zipfile -c "../../$out" grace9000.exe README.md LICENSE)
+    (cd target/stage && python -m zipfile -c "../../$out" grace9000.exe README.md LICENSE adapters)
     ls -la dist
     exit 0
     ;;
@@ -87,6 +89,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
+
+# The built-in adapters, inside the app.
+scripts/stage-adapters.sh "$APP/Contents/Resources/adapters" aarch64-apple-darwin x86_64-apple-darwin
 
 codesign --force --deep --sign - "$APP"
 rm -f "dist/grace9000-$VERSION-macos-universal.zip"

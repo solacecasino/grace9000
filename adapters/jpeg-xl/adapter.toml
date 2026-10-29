@@ -1,0 +1,13 @@
+name = "JPEG XL"
+version = "0.1.0"
+author = "grace9000"
+license = "MIT"
+description = "Opens JPEG XL photos, in sRGB, at up to 16 bits a channel, with or without an ffmpeg that knows them."
+homepage = "https://github.com/solacecasino/grace9000"
+requires = "0.0.2"
+
+# Opening a file runs `jpeg-xl <file> <picture.pam>`.
+[[opens]]
+label = "JPEG XL"
+extensions = ["jxl"]
+run = ["./jpeg-xl", "{input}", "{output}"]

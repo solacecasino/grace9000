@@ -10,8 +10,9 @@ workstation.
 
 ![grace9000](docs/screenshot.png)
 
-It's a prototype (0.0.1): nine kinds of step, crop, straighten, turn,
-mirror, export. Nothing else is in the app.
+It's a prototype (0.0.2): nine kinds of step, crop, straighten, turn,
+mirror, export, and nearly every kind of photo file, camera raw included.
+Nothing else is in the app.
 
 ## Installing
 
@@ -21,20 +22,44 @@ mirror, export. Nothing else is in the app.
 2. Unzip it and move grace9000.app to Applications.
 3. The first time, **right-click → Open**: the app isn't signed with an
    Apple developer certificate, so macOS asks once.
-4. Install [ffmpeg](https://ffmpeg.org) to open anything other than PNG:
+4. Install [ffmpeg](https://ffmpeg.org) for most formats:
    `brew install ffmpeg`. grace9000 runs it as a separate program for
-   reading and writing photos, so no codecs are built in. Without it, PNG
-   still opens and exports.
+   reading and writing photos, so no codecs are built in. Without it, PNG,
+   camera raw and JPEG XL still open, and PNG still exports.
 
-Windows and Linux build from the same code (`cargo build --release`) but
-have no downloads yet.
+**Windows** (x64 and Arm): unzip `grace9000-<version>-windows-<x64|arm64>.zip`
+anywhere and run `grace9000.exe`. Windows may warn about an unknown
+publisher the first time (the app isn't signed). Put ffmpeg on your PATH
+(for example `winget install ffmpeg`).
+
+**Linux** (x64 and Arm): unpack `grace9000-<version>-linux-<x64|arm64>.tar.gz`
+and run `./install.sh` inside it to add grace9000 to your app menu
+(`./install.sh --remove` takes it out). Install ffmpeg from your
+distribution (`sudo apt install ffmpeg`); for HEIC photos from phones it
+needs to be 7.1 or newer.
+
+Windows and Linux downloads start with 0.0.2; 0.0.1 was Mac only.
+
+## Photo files
+
+| | How it opens |
+|---|---|
+| JPEG, PNG, TIFF, WebP, HEIC/HEIF, AVIF, GIF, BMP | ffmpeg (PNG by grace9000 itself) |
+| Camera raw: Canon (CR2, CR3, CRW), Nikon (NEF, NRW), Sony (ARW), Fujifilm (RAF), Olympus (ORF), Panasonic (RW2), Pentax (PEF), Leica, Hasselblad (3FR, FFF), Phase One (IIQ), Sigma (X3F), Kodak, Minolta, Samsung and DNG | the built-in **Camera Raw** adapter |
+| JPEG XL | the built-in **JPEG XL** adapter |
+| JPEG 2000, Photoshop (PSD), OpenEXR, Radiance HDR, PFM, QOI, Targa, PPM/PGM/PBM/PAM, SGI, PCX, DPX, FITS, XWD and more | ffmpeg |
+
+Photos deeper than 8 bits a channel (16-bit TIFF and PNG, raw, HDR) are
+kept at 16. Phone photos come in turned the way they were taken. Camera raw
+opens the plain way: demosaiced, white balanced as the camera saw it, in
+sRGB; everything after that is your steps. The formats named here are
+tested by opening a file of each on every system grace9000 is built for
+(PSD and HEIC on macOS, where the test can make one).
 
 ## Editing a photo
 
-1. **Drop a photo** anywhere on the window (or `cmd+o`). JPEG, PNG, TIFF,
-   WebP, HEIC, AVIF and anything else your ffmpeg reads. Photos deeper than
-   8 bits are kept at 16. Phone photos come in turned the way they were
-   taken.
+1. **Drop a photo** anywhere on the window (or `cmd+o`): any of the files
+   above.
 2. **Add steps** with **+ Add** in the Steps panel, the Steps menu, or the
    buttons in Adjust. Each step goes below the selected one, and they run
    top to bottom:
@@ -80,10 +105,13 @@ A panel can be shown more than once.
 ## Adapters
 
 grace9000 has only what you need, and adapters add the rest: commands,
-panels, export formats, and steps of their own. Drop an adapter's zip on the
-window to install it; grace9000 shows what it adds and what it may do first,
-and never goes online itself. None come with 0.0.1. To make one, see
-[docs/adapters.md](docs/adapters.md).
+panels, export formats, file types it opens, and steps of their own. Drop an
+adapter's zip on the window to install it; grace9000 shows what it adds and
+what it may do first, and never goes online itself.
+
+Two come built in, and both can be removed in the Adapters panel (and
+added back): **Camera Raw** and **JPEG XL**, which open those files without
+ffmpeg. To make one, see [docs/adapters.md](docs/adapters.md).
 
 ## Customizing
 
@@ -111,7 +139,7 @@ On an M-series MacBook Air, release build, 2026-10-29:
 
 | | |
 |---|---|
-| Program size | 6.5 MB (Apple Silicon only; ffmpeg not included) |
+| Program size | 6.5 MB (Apple Silicon only; ffmpeg not included), plus 4.6 MB for Camera Raw and 2.2 MB for JPEG XL |
 | Memory, fresh start | 55 MB (physical footprint) |
 | Memory, a 6 MP PNG open | 98 MB |
 | Memory, a 24 MP JPEG open | 184 MB |
@@ -127,12 +155,13 @@ never wait for it; it's what makes a whole step cost a few milliseconds.
 
 ## Not yet
 
-Color management (photos are taken as sRGB; a Display P3 or Adobe RGB photo
-looks a little flat), camera raw files, local edits (brushes, masks,
-healing), sharpening and noise reduction (they need neighbouring pixels;
-adapters can do them now with `image.render`), copying EXIF and other
-metadata into exports, more than one photo at a time, Windows and Linux
-downloads and CI.
+Color management (photos are taken as sRGB, so a Display P3 or Adobe RGB
+photo looks a little flat; JPEG XL is the exception), local edits (brushes,
+masks, healing), sharpening and noise reduction (they need neighbouring
+pixels; adapters can do them now with `image.render`), copying EXIF and
+other metadata into exports, more than one photo at a time. Camera raw has
+been tested with a DNG made for the tests, not yet with files from real
+cameras.
 
 ## License
 

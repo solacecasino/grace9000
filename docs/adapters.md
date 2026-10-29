@@ -16,10 +16,14 @@ An adapter can add:
 - **panels** you place in the layout like any other;
 - **export formats**, which need no program at all: an adapter can be only
   an `adapter.toml` of presets;
+- **file types it opens**, with a program that turns each file into a
+  picture grace9000 reads (that's how camera raw works);
 - **steps of its own kind** in the edit (see `edit.set`): grace9000 keeps
   them and skips them, so an adapter can do the work with `image.render`.
 
-0.0.1 comes with no adapters, and there's no catalog yet.
+Two come built in: **Camera Raw** and **JPEG XL** (their source is in
+`adapters/` in this repo). Built-in adapters can be removed in the Adapters
+panel and added back. There's no catalog yet.
 
 ## Installing
 
@@ -70,7 +74,29 @@ args = ["-c:v", "libaom-av1", "-still-picture", "1", "-crf", "28"]  # ffmpeg enc
 filter = ""                     # an ffmpeg filter on the finished picture, such as "hue=s=0"
 long_edge = 2048                # shrink so the long side is this; 0: settings.toml's
 bits = 0                        # 8 or 16 into ffmpeg; 0: the photo's own
+
+[[opens]]                       # file types this adapter opens
+label = "Camera raw"            # shown in the Info panel
+extensions = ["cr2", "nef"]     # any case, without the dot
+run = ["./raw-decode", "{input}", "{output}"]
 ```
+
+### Opening files
+
+When a file with one of an `[[opens]]` extension is opened, grace9000 runs
+its `run` (from the adapter's folder, like the main program) with `{input}`
+replaced by the file and `{output}` by where to put the picture, and waits
+for it to finish. The program writes the picture as PAM (`P7`, `DEPTH` 1 to
+4, `MAXVAL` 255 or up to 65535, any bit depth in between scaled to 16) or
+PNG, turned the way it should be shown, in sRGB, then exits with 0. Anything
+else, and what it printed to stderr is shown as the reason. An adapter with
+only `[[opens]]` needs no main program; its `run` there is the only thing of
+it that ever runs. Like any program-backed adapter, one you copied in by
+hand is allowed first (Allow… in the Adapters panel).
+
+`[[opens]]` wins over ffmpeg for its extensions, so an adapter can open a
+format better than ffmpeg does (camera raw, where ffmpeg shows the sensor's
+mosaic).
 
 - `run` is started in the adapter's folder. A program given as a path
   (`./web-sizes`) is found there, and on Windows `.exe` is added if that's
@@ -179,3 +205,5 @@ add things, so an adapter written for an older version keeps working.
 
 - **1** (grace9000 0.0.1): commands, panels, export formats, the edit,
   `image.render`, events and prompts.
+- **2** (grace9000 0.0.2): `[[opens]]`. An adapter using it should set
+  `requires = "0.0.2"`.

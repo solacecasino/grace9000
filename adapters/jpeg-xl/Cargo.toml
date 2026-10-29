@@ -1,0 +1,14 @@
+[package]
+name = "jpeg-xl"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+jxl-oxide = { version = "0.12.6", features = ["moxcms"] }
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

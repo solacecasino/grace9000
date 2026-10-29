@@ -321,7 +321,7 @@ impl App {
             app.read(photo, Some(p));
         }
         // Files named on the command line (Open With on Windows and Linux).
-        let named: Vec<PathBuf> = std::env::args_os().skip(1).map(PathBuf::from).filter(|p| p.exists()).collect();
+        let named: Vec<PathBuf> = std::env::args_os().skip(1).map(PathBuf::from).filter(|p| p.exists()).map(|p| std::path::absolute(&p).unwrap_or(p)).collect();
         app.open_paths(named);
         app
     }
@@ -405,7 +405,9 @@ impl App {
         let has_photo = self.photo.is_some();
         match command {
             "open" => {
+                let theirs: Vec<String> = self.adapters.openers().into_iter().flat_map(|o| o.extensions).collect();
                 let mut exts: Vec<&str> = image::OPENS.to_vec();
+                exts.extend(theirs.iter().map(String::as_str));
                 exts.push("grace");
                 if let Some(path) = rfd::FileDialog::new().add_filter("Photos and edits", &exts).add_filter("All files", &["*"]).pick_file() {
                     self.open_paths(vec![path]);
@@ -674,8 +676,9 @@ impl App {
     fn read(&mut self, path: PathBuf, with: Option<Project>) {
         self.reading = Some(path.clone());
         let (tx, tools, ctx) = (self.loaded_tx.clone(), self.tools.clone(), self.ctx.clone());
+        let (openers, env) = (self.adapters.openers(), self.adapters.env.clone());
         std::thread::spawn(move || {
-            let r = image::load(tools.as_ref(), &path).map_err(|e| format!("{}: {e}", path.display()));
+            let r = image::load(tools.as_ref(), &path, &openers, &env).map_err(|e| format!("{}: {e}", path.display()));
             let _ = tx.send((path, r, with));
             ctx.request_repaint();
         });

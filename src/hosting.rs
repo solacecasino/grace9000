@@ -121,9 +121,16 @@ impl App {
         true
     }
 
-    /// Starts an adapter (for its panel), asking first if it must.
+    /// Starts an adapter (for its panel), asking first if it must. One that
+    /// only opens files has nothing to start: this asks to allow it.
     pub fn start_adapter(&mut self, name: &str) {
         let Some(i) = self.adapters.index(name) else { return };
+        if self.adapters.all[i].manifest.run.is_empty() {
+            if !self.adapters.approved(i) {
+                self.ask(Prompt::Allow { adapter: name.to_owned(), then: None });
+            }
+            return;
+        }
         match self.adapters.start(i) {
             Ok(_) => {}
             Err(StartError::NeedsApproval) => self.ask(Prompt::Allow { adapter: name.to_owned(), then: None }),
@@ -415,6 +422,10 @@ impl App {
             Prompt::Allow { adapter, then } if yes => {
                 if let Some(i) = self.adapters.index(&adapter) {
                     self.adapters.allow(i);
+                    if self.adapters.all[i].manifest.run.is_empty() {
+                        self.say(format!("Allowed {adapter}. Open the file again."));
+                        return;
+                    }
                     match then {
                         Some(id) => self.run(&command_name("adapter", &adapter, &id)),
                         None => self.start_adapter(&adapter),

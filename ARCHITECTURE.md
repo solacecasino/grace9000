@@ -9,7 +9,7 @@ For people changing the code. The ideals behind these choices are in
 |---|---|
 | `main.rs` | `App`: all state, the commands, opening and saving, config, the session |
 | `project.rs` | the document: the photo, its steps, the turn and the crop (`.grace`) |
-| `image.rs` | finding ffmpeg, reading photos (PNG by itself), the pyramid, sRGB tables |
+| `image.rs` | finding ffmpeg, reading photos (PNG and PAM by itself, others through adapters), the pyramid, sRGB tables |
 | `develop.rs` | `KINDS`, the one list of step kinds, and the renderer |
 | `preview.rs` | the preview thread, and the histogram |
 | `export.rs` | rendering the photo to a file, strip by strip |
@@ -47,7 +47,18 @@ a timer, so an idle editor uses no CPU.
 A photo is read once, by ffmpeg, as PAM: a header with the size, then
 RGBA, 8 bits a channel, or 16 when the file holds more than 8. ffmpeg turns
 it the way its EXIF says first. PNG is read by the `png` crate instead, so
-it works without ffmpeg. The pixels are kept as they were stored,
+it works without ffmpeg.
+
+An adapter's `[[opens]]` wins over both for its extensions (`Opener`): its
+program runs on the reading thread and leaves a PAM or PNG in the temporary
+folder, which is read the same way and removed. That's how camera raw
+(`adapters/camera-raw`, rawler) and JPEG XL (`adapters/jpeg-xl`, jxl-oxide)
+come in, so the core still links no codecs. Built-in adapters ship beside
+the program (`scripts/stage-adapters.sh`).
+
+A HEIC or AVIF stored as a grid of tiles comes back from an ffmpeg older
+than 7.1 as its first tile alone; ffprobe's list of same-sized tiles gives
+that away, and grace9000 says so instead of showing a piece of the photo. The pixels are kept as they were stored,
 gamma-encoded, beside a pyramid of halvings down to 256 pixels (a third
 more memory).
 
