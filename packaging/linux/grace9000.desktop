@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=grace9000
+GenericName=Photo Editor
+Comment=A bare, modular photo editor
+Exec=grace9000 %f
+Icon=grace9000
+Terminal=false
+Categories=Graphics;Photography;RasterGraphics;
+Keywords=photo;image;edit;crop;curves;
+StartupWMClass=grace9000
+MimeType=image/jpeg;image/png;image/tiff;image/webp;image/heic;image/avif;
