@@ -1,6 +1,6 @@
 [package]
 name = "grace9000"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2024"
 description = "A bare, modular photo editor: non-destructive steps, crop and straighten, export, with a layout you rearrange like foobar2000."
 license = "MIT"
