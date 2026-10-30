@@ -11,7 +11,7 @@ use crate::layout::PANELS;
 /// "add" the step kinds, "export as" the export formats adapters add. Adapters' commands go at
 /// the end of the menu they ask for, or of Adapters.
 pub const MENUS: &[(&str, &[&str])] = &[
-    ("File", &["open", "close", "-", "save", "save as", "-", "export", "export as"]),
+    ("File", &["open", "close", "-", "save", "save as", "-", "export", "export as", "-", "sister leaf9000"]),
     ("Edit", &["undo", "redo", "-", "compare"]),
     ("Photo", &["crop", "crop reset", "-", "rotate left", "rotate right", "flip horizontal", "flip vertical", "-", "straighten left", "straighten right"]),
     ("Steps", &["add", "-", "step toggle", "step reset", "step delete", "-", "step up", "step down"]),
@@ -59,6 +59,7 @@ pub fn label(command: &str) -> String {
         "zoom fit" => "Zoom to Fit",
         "zoom 100" => "Actual Size",
         "config" => "Open Settings Folder",
+        "sister leaf9000" => "Page Through Folder in leaf9000",
         "install adapter" => "Install Adapter…",
         "quit" => "Quit grace9000",
         other => other,

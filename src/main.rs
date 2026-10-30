@@ -9,22 +9,23 @@
 //! changed: the edit is a list of steps and a crop, kept beside it.
 
 mod adapters;
+use adapters::Sections;
+// The 9000 series' shared core: the window, the adapter host, the sisters.
+#[cfg(target_os = "macos")]
+use core9000::incoming;
+use core9000::{log, shell, watch};
 mod develop;
 mod export;
 mod hosting;
 mod image;
-mod incoming;
 mod keys;
 mod layout;
-mod log;
 mod menu;
 mod panels;
 mod preview;
 mod project;
 mod settings;
-mod shell;
 mod theme;
-mod watch;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -138,6 +139,7 @@ pub struct App {
 }
 
 fn main() {
+    core9000::init(&adapters::APP);
     if std::env::args().nth(1).as_deref() == Some("--version") {
         println!("grace9000 {}", env!("CARGO_PKG_VERSION"));
         return;
@@ -235,6 +237,7 @@ fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
 
 impl App {
     fn new(ctx: &egui::Context, dir: PathBuf) -> Self {
+        core9000::init(&adapters::APP);
         incoming::started(ctx);
         for (name, text) in [("settings.toml", settings::EXAMPLE), ("keys.toml", keys::EXAMPLE)] {
             let path = dir.join(name);
@@ -259,7 +262,7 @@ impl App {
         let (tx, adapter_rx) = channel();
         let adapters = {
             let (tx, ctx) = (std::sync::Mutex::new(tx), ctx.clone());
-            let env = adapters::Env { config: dir.clone(), builtin: adapters::builtin_dir(), ffmpeg: None, ffprobe: None };
+            let env = adapters::Env { config: dir.clone(), builtin: adapters::builtin_dir(), ..adapters::Env::default() };
             adapters::Host::new(env, move |m| {
                 let _ = tx.lock().unwrap_or_else(|e| e.into_inner()).send(m);
                 ctx.request_repaint();
@@ -356,8 +359,16 @@ impl App {
             }
             self.encoders = None;
             // Adapters get the same ffmpeg.
-            self.adapters.env.ffmpeg = self.tools.as_ref().map(|t| t.ffmpeg.clone());
-            self.adapters.env.ffprobe = self.tools.as_ref().map(|t| t.ffprobe.clone());
+            // Adapters use the same ffmpeg, so they need none of their own.
+            let (mut init, mut vars) = (serde_json::Map::new(), Vec::new());
+            for (key, path) in [("ffmpeg", self.tools.as_ref().map(|t| &t.ffmpeg)), ("ffprobe", self.tools.as_ref().map(|t| &t.ffprobe))] {
+                init.insert(key.into(), path.map_or(serde_json::Value::Null, |p| p.to_string_lossy().into()));
+                if let Some(p) = path {
+                    vars.push((format!("GRACE9000_{}", key.to_uppercase()), p.clone().into_os_string()));
+                }
+            }
+            self.adapters.env.init = init;
+            self.adapters.env.vars = vars;
         }
         // Keys (the user's and adapters') and the menus that show them.
         self.refresh_commands();
@@ -560,6 +571,18 @@ impl App {
                 self.save_layout();
             }
             "config" => open_folder(&self.dir),
+            "sister leaf9000" => {
+                // leaf9000 opens a photo as its folder, at that photo: read
+                // through the shoot like a book.
+                match self.project.photo.clone() {
+                    Some(p) => {
+                        if let Err(e) = core9000::sisters::get("leaf9000").expect("a sister").open(&[&p], None) {
+                            self.say(e);
+                        }
+                    }
+                    None => self.say("Open a photo first, to page through its folder in leaf9000."),
+                }
+            }
             "quit" => self.ctx.send_viewport_cmd(ViewportCommand::Close),
             c if keys::COMMANDS.iter().any(|k| k.0 == c) => {
                 // A real command with nothing to act on yet.
@@ -881,6 +904,16 @@ impl App {
     fn open_paths(&mut self, paths: Vec<PathBuf>) {
         if paths.is_empty() {
             return;
+        }
+        // grace9000 takes photos, its projects and what adapters open;
+        // video, sound, documents and comics go to the sisters that open
+        // them.
+        let theirs: Vec<String> = self.adapters.openers().into_iter().flat_map(|o| o.extensions).collect();
+        let theirs: Vec<&str> = theirs.iter().map(String::as_str).collect();
+        use core9000::sisters::{PHOTO, is};
+        let (paths, problems) = core9000::sisters::hand_off(paths, |p| is(p, PHOTO) || is(p, &theirs) || is(p, &["grace"]) || adapters::is_package(p));
+        for p in problems {
+            self.say(p);
         }
         let (packages, paths): (Vec<_>, Vec<_>) = paths.into_iter().partition(|p| adapters::is_package(p));
         for p in packages {

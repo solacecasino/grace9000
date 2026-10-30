@@ -4,6 +4,7 @@
 use egui::{Align2, Color32, CursorIcon, FontId, Id, Pos2, Rect, RichText, Sense, Stroke, StrokeKind, Ui, UiBuilder, pos2, vec2};
 
 use crate::develop::{self, KINDS};
+use crate::adapters::Sections;
 use crate::layout::Part;
 use crate::project::{Crop, Step};
 use crate::theme::Palette;
@@ -939,8 +940,8 @@ fn adapters_panel(app: &mut App, ui: &mut Ui) {
             if !m.description.is_empty() {
                 ui.label(RichText::new(&m.description).color(pal.weak));
             }
-            let can = if m.run.is_empty() && !m.opens.is_empty() {
-                let n: usize = m.opens.iter().map(|o| o.extensions.len()).sum();
+            let can = if m.run.is_empty() && !m.extra.opens.is_empty() {
+                let n: usize = m.extra.opens.iter().map(|o| o.extensions.len()).sum();
                 format!("Opens {n} kinds of file; runs only on those")
             } else if m.run.is_empty() {
                 "Presets only: nothing runs".to_owned()
@@ -950,8 +951,8 @@ fn adapters_panel(app: &mut App, ui: &mut Ui) {
                 format!("Can {}", m.permissions.iter().map(|p| crate::adapters::describe(p)).collect::<Vec<_>>().join("; "))
             };
             ui.label(RichText::new(can).small().color(pal.weak));
-            if !m.exports.is_empty() {
-                let list: Vec<&str> = m.exports.iter().map(|e| e.label.as_str()).collect();
+            if !m.extra.exports.is_empty() {
+                let list: Vec<&str> = m.extra.exports.iter().map(|e| e.label.as_str()).collect();
                 ui.label(RichText::new(format!("Export formats: {}", list.join(", "))).small().color(pal.weak));
             }
             ui.horizontal_wrapped(|ui| {
@@ -966,7 +967,7 @@ fn adapters_panel(app: &mut App, ui: &mut Ui) {
                         toggles.push((m.name.clone(), p.id.clone()));
                     }
                 }
-                if !m.opens.is_empty() && !app.adapters.approved(i) && ui.small_button("Allow…").on_hover_text("Let it open the files it knows").clicked() {
+                if !m.extra.opens.is_empty() && !app.adapters.approved(i) && ui.small_button("Allow…").on_hover_text("Let it open the files it knows").clicked() {
                     app.queue.push(format!("adapter-start \"{}\"", m.name));
                 }
                 let tip = if a.builtin { "Take it out of grace9000; Add Back brings it again" } else { "Move it to the Trash" };

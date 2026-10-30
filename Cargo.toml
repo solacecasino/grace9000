@@ -6,8 +6,11 @@ description = "A bare, modular photo editor: non-destructive steps, crop and str
 license = "MIT"
 
 [dependencies]
+# The 9000 series' shared core: the window, the adapter host, the family
+# protocol and the sisters.
+core9000 = { git = "https://github.com/solacecasino/core9000", tag = "v0.1.1" }
 # The interface (egui), the window and input (winit, egui-winit), and the
-# pixels: drawn by the CPU (src/shell, from Folio), so no graphics driver is
+# pixels: drawn by the CPU (core9000's shell, from Folio), so no graphics driver is
 # loaded. Photos are decoded and encoded by the system's ffmpeg, run as a
 # separate program, so no codecs are linked in; PNG and the renderer are
 # our own.

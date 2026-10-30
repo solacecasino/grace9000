@@ -59,6 +59,7 @@ pub const COMMANDS: &[(&str, &str, &str)] = &[
     ("panel log", "", "Show or hide the Log panel"),
     ("panel help", "", "Show or hide the Help panel"),
     ("panel adapters", "", "Show or hide the Adapters panel"),
+    ("sister leaf9000", "", "Page through the photo's folder in leaf9000"),
     ("install adapter", "", "Install an adapter from a zip or folder"),
 ];
 

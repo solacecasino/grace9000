@@ -525,7 +525,7 @@ mod adapter_tests {
         };
         let text = std::fs::read_to_string(root.join(format!("adapters/{name}/adapter.toml"))).unwrap();
         let m: crate::adapters::Manifest = toml::from_str(&text).unwrap();
-        let o = &m.opens[0];
+        let o = &m.extra.opens[0];
         Some(Opener { adapter: m.name.clone(), label: o.label.clone(), dir, run: o.run.clone(), extensions: o.extensions.clone(), approved: true })
     }
 
