@@ -93,6 +93,10 @@ pub struct App {
     pub selected: Option<usize>,
     preview: Preview,
     texture: Option<TextureHandle>,
+    /// The whole photo, small, drawn under the sharp part while zoomed in,
+    /// so moving around never shows empty edges while a preview is made.
+    overview: Preview,
+    overview_texture: Option<(TextureHandle, develop::View)>,
     histogram: Option<Box<[[u32; 256]; 4]>>,
     /// How long the last preview took, in milliseconds.
     preview_ms: f32,
@@ -271,6 +275,10 @@ impl App {
             let ctx = ctx.clone();
             Preview::start(move || ctx.request_repaint())
         };
+        let overview = {
+            let ctx = ctx.clone();
+            Preview::start(move || ctx.request_repaint())
+        };
         let mut app = Self {
             menu: menu::MenuBar::install(&Keymap::load("", &[]).0, ctx, None, &menu::Extras::default()),
             palette: theme::Palette::new(&settings::Look::default()),
@@ -291,6 +299,8 @@ impl App {
             selected: None,
             preview,
             texture: None,
+            overview,
+            overview_texture: None,
             histogram: None,
             preview_ms: 0.0,
             view: View { zoom: None, center: [0.5, 0.5], scale: 1.0, shown: None, area: None, drag: panels::Drag::None },
@@ -430,6 +440,7 @@ impl App {
                 self.keep_previous();
                 self.photo = None;
                 self.texture = None;
+                self.overview_texture = None;
                 self.histogram = None;
                 self.project = Project::default();
                 self.file = None;
@@ -727,11 +738,13 @@ impl App {
                     self.project = project;
                     self.photo = Some(photo);
                     self.texture = None;
+                    self.overview_texture = None;
                     self.histogram = None;
                     self.view.zoom = None;
                     self.view.center = [0.5, 0.5];
                     self.view.shown = None;
                     self.preview.again();
+                    self.overview.again();
                     self.cropping = false;
                     self.compare = false;
                     self.undo.clear();
@@ -867,6 +880,25 @@ impl App {
                 None => self.texture = Some(self.ctx.load_texture("photo", done.image, TextureOptions::LINEAR)),
             }
         }
+        if let Some(done) = self.overview.take() {
+            match &mut self.overview_texture {
+                Some((t, v)) => {
+                    t.set(done.image, TextureOptions::LINEAR);
+                    *v = done.view;
+                }
+                None => self.overview_texture = Some((self.ctx.load_texture("overview", done.image, TextureOptions::LINEAR), done.view)),
+            }
+        }
+    }
+
+    /// The whole result at most `long` pixels on its long side, for under
+    /// the sharp part while zoomed in.
+    pub fn ask_overview(&mut self, long: f32, plain: bool) {
+        let Some(photo) = &self.photo else { return };
+        let (w, h) = develop::full_size(photo.width, photo.height, &self.project.edit, 1.0, false);
+        let scale = (long / w.max(h)).min(1.0);
+        let view = develop::View { scale, x: 0, y: 0, w: (w * scale).round().max(1.0) as usize, h: (h * scale).round().max(1.0) as usize, whole: false, plain };
+        self.overview.ask(preview::Request { photo: photo.clone(), edit: self.project.edit.clone(), view });
     }
 
     pub fn ask_preview(&mut self, view: develop::View) {
@@ -1060,6 +1092,11 @@ mod tests {
         textures: Textures,
         canvas: Canvas,
         px: Vec<u32>,
+        /// The same frames drawn as the window draws them: only what
+        /// changed, onto the last frame's pixels. Must always equal `px`.
+        damage_canvas: Canvas,
+        damage_px: Vec<u32>,
+        frames: usize,
         _dir: PathBuf,
     }
 
@@ -1070,7 +1107,17 @@ mod tests {
             std::fs::create_dir_all(&dir).unwrap();
             let ctx = egui::Context::default();
             let app = App::new(&ctx, dir.clone());
-            Self { ctx, app, textures: Textures::default(), canvas: Canvas::default(), px: vec![0; W * H], _dir: dir }
+            Self {
+                ctx,
+                app,
+                textures: Textures::default(),
+                canvas: Canvas::default(),
+                px: vec![0; W * H],
+                damage_canvas: Canvas::default(),
+                damage_px: vec![0; W * H],
+                frames: 0,
+                _dir: dir,
+            }
         }
 
         fn frame(&mut self, events: Vec<Event>) {
@@ -1078,16 +1125,25 @@ mod tests {
             let app = &mut self.app;
             let mut out = self.ctx.run_ui(raw, |ui| shell::App::ui(app, ui));
             self.textures.set(&out.textures_delta);
-            let frame = Frame {
-                shapes: out.shapes,
+            let frame = |shapes| Frame {
+                shapes,
                 pixels_per_point: 1.0,
                 options: self.ctx.tessellation_options(|o| *o),
                 atlas_size: self.ctx.fonts(|f| f.font_image_size()),
                 clear: self.ctx.global_style().visuals.panel_fill,
             };
             let mut target = Target { px: &mut self.px, stride: W, width: W, height: H };
-            self.canvas.paint(frame, &self.textures, &mut target, 0);
+            self.canvas.paint(frame(out.shapes.clone()), &self.textures, &mut target, 0);
+            let mut target = Target { px: &mut self.damage_px, stride: W, width: W, height: H };
+            self.damage_canvas.paint(frame(out.shapes), &self.textures, &mut target, 1);
             self.textures.free(&mut out.textures_delta);
+            self.frames += 1;
+            if self.px != self.damage_px {
+                let bad = self.px.iter().zip(&self.damage_px).filter(|(a, b)| a != b).count();
+                self.save("damage-full", &self.px);
+                self.save("damage-partial", &self.damage_px);
+                panic!("frame {}: drawing only what changed left {bad} pixels different from drawing it all", self.frames);
+            }
         }
 
         /// Frames until `done`, up to a few seconds (reading and previews
@@ -1123,8 +1179,12 @@ mod tests {
         }
 
         fn shot(&self, name: &str) {
+            self.save(name, &self.px);
+        }
+
+        fn save(&self, name: &str, px: &[u32]) {
             let Some(dir) = std::env::var_os("GRACE9000_SHOTS") else { return };
-            let bytes: Vec<u8> = self.px.iter().flat_map(|p| [(p >> 16) as u8, (p >> 8) as u8, *p as u8, 255]).collect();
+            let bytes: Vec<u8> = px.iter().flat_map(|p| [(p >> 16) as u8, (p >> 8) as u8, *p as u8, 255]).collect();
             let file = std::fs::File::create(PathBuf::from(dir).join(format!("{name}.png"))).unwrap();
             let mut enc = png::Encoder::new(file, W as u32, H as u32);
             enc.set_color(png::ColorType::Rgba);
@@ -1229,4 +1289,57 @@ mod tests {
         let saved: Project = serde_json::from_str(&std::fs::read_to_string(h.app.dir.join("session.json")).unwrap()).unwrap();
         assert_eq!(saved.edit, h.app.project.edit);
     }
+
+    /// Moving around a zoomed photo quickly, the way a hand does: frames
+    /// come faster than previews, and every one must be drawn right.
+    #[test]
+    fn panning_a_zoomed_photo_quickly() {
+        let mut h = Harness::new();
+        h.app.open_paths(vec![sample_photo()]);
+        h.until("the photo", |a| a.photo.is_some());
+        h.settle();
+        h.app.view.zoom = Some(0.93);
+        h.settle();
+        let area = h.app.view.area.expect("drawn");
+        let photo = area.intersect(egui::Rect::from_min_max(egui::pos2(260.0, 60.0), egui::pos2(1100.0, 860.0)));
+        let c = photo.center();
+        let button = |pos, pressed| Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+        // Back and forth, a few points a frame, with previews landing now
+        // and then (a short sleep) as they do on a real machine.
+        for round in 0..3 {
+            h.frame(vec![Event::PointerMoved(c)]);
+            h.frame(vec![button(c, true)]);
+            let path: Vec<egui::Vec2> = (1..=30).map(|k| egui::vec2((k as f32 * 0.35).sin() * 260.0, (k as f32 * 0.21).cos() * 160.0 - 160.0)).collect();
+            for (k, d) in path.iter().enumerate() {
+                h.frame(vec![Event::PointerMoved(c + *d)]);
+                // Inside the photo's place on screen, nothing is left empty.
+                let area = h.app.view.area.expect("drawn").intersect(photo);
+                let well = {
+                    let w = h.app.palette.well;
+                    0xff00_0000 | u32::from(w.r()) << 16 | u32::from(w.g()) << 8 | u32::from(w.b())
+                };
+                let (mut empty, mut all) = (0, 0);
+                for y in (area.top() as usize + 2..area.bottom() as usize - 2).step_by(7) {
+                    for x in (area.left() as usize + 2..area.right() as usize - 2).step_by(7) {
+                        all += 1;
+                        empty += usize::from(h.px[y * W + x] == well);
+                    }
+                }
+                if empty * 100 > all {
+                    h.shot("pan-empty");
+                    panic!("round {round}, step {k}: {empty} of {all} points of the photo were empty");
+                }
+                if k % 4 == round {
+                    std::thread::sleep(std::time::Duration::from_millis(40));
+                }
+                if round == 0 && k == 12 {
+                    h.shot("pan-mid");
+                }
+            }
+            h.frame(vec![button(c + path[29], false)]);
+        }
+        h.settle();
+        h.shot("pan-end");
+    }
+
 }

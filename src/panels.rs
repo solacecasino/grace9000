@@ -191,6 +191,11 @@ fn photo(app: &mut App, ui: &mut Ui) {
         let view = develop::View { scale, x: x0 as i32, y: y0 as i32, w: (x1 - x0) as usize, h: (y1 - y0) as usize, whole, plain: app.compare };
         app.ask_preview(view);
     }
+    // Bigger than the panel: the whole photo, small, goes underneath.
+    let zoomed = !whole && (fx > p.x || fy > p.y);
+    if zoomed {
+        app.ask_overview(1024.0, app.compare);
+    }
 
     // Behind the photo, then the photo (stretched from the last preview
     // until the new one comes).
@@ -198,13 +203,19 @@ fn photo(app: &mut App, ui: &mut Ui) {
     app.view.area = Some(img);
     let painter = ui.painter().with_clip_rect(rect);
     backdrop(&painter, img.intersect(rect), &app.settings.look.backdrop, &pal);
+    let full_uv = Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0));
+    if zoomed && let Some((tex, ov)) = &app.overview_texture {
+        // It's the whole result, so it fills the photo's whole place.
+        let size = vec2(ov.w as f32, ov.h as f32) * (scale / ov.scale);
+        painter.image(tex.id(), Rect::from_min_size((tl / ppp).to_pos2(), size / ppp), full_uv, Color32::WHITE);
+    }
     if let (Some(tex), Some(sv)) = (&app.texture, app.view.shown)
         && sv.whole == whole
     {
         let k = scale / sv.scale;
         let min = tl + vec2(sv.x as f32, sv.y as f32) * k;
         let size = vec2(sv.w as f32, sv.h as f32) * k;
-        painter.image(tex.id(), Rect::from_min_size((min / ppp).to_pos2(), size / ppp), Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)), Color32::WHITE);
+        painter.image(tex.id(), Rect::from_min_size((min / ppp).to_pos2(), size / ppp), full_uv, Color32::WHITE);
     }
     if whole {
         crop_overlay(app, ui, rect, img, &resp, fw1 / fh1);
