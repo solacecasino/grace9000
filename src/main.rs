@@ -142,7 +142,7 @@ fn main() {
         println!("grace9000 {}", env!("CARGO_PKG_VERSION"));
         return;
     }
-    // Files to open: from the command line, or (macOS) the system.
+    // Files macOS opens with the app, from Finder or another app.
     incoming::listen_early();
     let dir = config_dir();
     let _ = std::fs::create_dir_all(&dir);
