@@ -85,6 +85,23 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>11.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSHumanReadableCopyright</key><string>© 2026 Vishal Mohan · MIT License</string>
+  <!-- Its own files open here by double-click; the media only lists it
+       under Open With, so no other app's defaults change. -->
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key><string>grace9000 Edit</string>
+      <key>CFBundleTypeExtensions</key><array><string>grace</string></array>
+      <key>CFBundleTypeRole</key><string>Editor</string>
+      <key>LSHandlerRank</key><string>Owner</string>
+    </dict>
+    <dict>
+      <key>CFBundleTypeName</key><string>Photo</string>
+      <key>CFBundleTypeExtensions</key><array><string>jpg</string><string>jpeg</string><string>png</string><string>tif</string><string>tiff</string><string>webp</string><string>heic</string><string>heif</string><string>avif</string><string>bmp</string><string>gif</string><string>jxl</string><string>dng</string><string>cr2</string><string>cr3</string><string>nef</string><string>nrw</string><string>arw</string><string>srf</string><string>sr2</string><string>raf</string><string>orf</string><string>rw2</string><string>pef</string><string>srw</string><string>3fr</string><string>iiq</string><string>x3f</string></array>
+      <key>CFBundleTypeRole</key><string>Editor</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+    </dict>
+  </array>
 </dict>
 </plist>
 PLIST
